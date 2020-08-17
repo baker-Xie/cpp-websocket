@@ -30,7 +30,6 @@
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace asio = boost::asio;            // from <boost/asio.hpp>
-//namespace ssl = asio::ssl;
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 using std::vector;
 using std::queue;
@@ -45,9 +44,9 @@ using std::flush;
 
 namespace ws
 {
-// safe for flat_buffer
+    // safe for flat_buffer
     typedef shared_ptr<beast::flat_buffer> PTR_buffer;
-// safe for vector
+    // safe for vector
     typedef shared_ptr<vector<PTR_buffer>> PTR_buffer_seq;
 
 
@@ -58,12 +57,12 @@ namespace ws
     };
 
 
-/** Abstract class to define the interface of plugins
- * You must override the function you want
- * Meanwhile, you can use template to represent owner class and caller class.
- * See example in
- * class SessionRemover
- */
+    /** Abstract class to define the interface of plugins
+     * You must override the function you want
+     * Meanwhile, you can use template to represent owner class and caller class.
+     * See example in
+     * class SessionRemover
+     */
     class BasePlugin
     {
     public:
@@ -144,9 +143,9 @@ namespace ws
     };
 
 
-/** The manager saves all plugins.
- * When call the following function, the manager will call the same function in all plugins
- */
+    /** The manager saves all plugins.
+     * When call the following function, the manager will call the same function in all plugins
+     */
     class PluginManager
     {
         vector<shared_ptr<BasePlugin>> _plugins;
@@ -1006,7 +1005,7 @@ namespace ws
     class server
     {
     public:
-        server(int threads_num = 1) : _ioc{std::max(threads_num,1)}
+        server(int threads_num = 1) : _ioc{std::max(threads_num, 1)}
         {
             _threads_num = std::max(threads_num, 1);
             _running = false;
