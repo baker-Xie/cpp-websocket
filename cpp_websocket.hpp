@@ -3,11 +3,11 @@
 //
 
 /** This is a websocket class using boost::beast and jsoncpp
-example:
+example 1:
+#include "cpp_websocket.hpp"
 int main()
 {
     ws::server srv;
-    Demo demo;
     srv.on_connect = [&](ws::Session *caller, string end_point)
     {
 
@@ -23,6 +23,81 @@ int main()
     };
     srv.listen_block("127.0.0.1", 8001);
 }
+
+example 2:
+#include "cpp_websocket.hpp"
+#include <atomic>
+
+class Demo
+{
+public:
+    Demo(ws::server &srv) : _srv(srv)
+    {
+        _t = nullptr;
+        _stop = false;
+    }
+
+    void MainLoop()
+    {
+        while (!_stop)
+        {
+            string s = "hello!";
+	    _srv.SendTextMessage(s);
+        }
+        return;
+    }
+
+    void on_connect(ws::Session *caller, string end_point)
+    {
+        _caller = caller;
+        _stop = false;
+        _t = new thread(&Demo::MainLoop, this);
+    }
+
+    void on_disconnect(ws::Session *caller, string end_point)
+    {
+        _stop = true;
+        if (_t)
+        {
+            if (_t->joinable())
+                _t->join();
+            delete _t;
+            _t = nullptr;
+        }
+    }
+
+    void on_message(ws::Session *caller, string end_point, ws::PTR_buffer data, bool is_text)
+    {
+
+    }
+
+private:
+    std::atomic_bool _stop;
+    ws::server &_srv;
+    std::thread *_t;
+    ws::Session *_caller;
+};
+
+int main()
+{
+    ws::server srv;
+    Demo demo(srv);
+    srv.on_connect = std::bind(&Demo::on_connect, &demo, _1, _2);
+    srv.on_disconnect = std::bind(&Demo::on_disconnect, &demo, _1, _2);
+    srv.on_message = std::bind(&Demo::on_message, &demo, _1, _2, _3, _4);
+    srv.listen_block("127.0.0.1", 8001);
+}
+
+CMakelist:
+set(Boost_DIR /home/u/mylib/boost/1.73/lib/cmake/Boost-1.73.0)
+find_package(Boost REQUIRED thread)
+include_directories(${Boost_INCLUDE_DIRS})
+find_package(Threads REQUIRED)
+find_package(jsoncpp)
+
+target_link_libraries(main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(main ${Boost_LIBRARIES})
+target_link_libraries(main jsoncpp_lib)
  */
 
 #ifndef CPP_WEBSOCKET_CPP_WEBSOCKET_HPP
@@ -254,11 +329,14 @@ namespace ws
 
         void onClose(void *caller, string &endPoint_str)
         {
-
+            GetOwner()->deleteSession(endPoint_str);
         }
 
     private:
-
+        Owner* GetOwner()
+        {
+            return (Owner*)_owner;
+        }
     };
 
 
@@ -1154,6 +1232,8 @@ namespace ws
         {
             if (endpoint == "")
             {
+                if (_listener->GetSessionList().size()>1)
+                    double k = 1;
                 for (auto &&sess:_listener->GetSessionList())
                 {
                     sess.second->SendBinaryMessage(data);
