@@ -28,6 +28,9 @@
 #include <boost/beast/websocket.hpp>
 //#include <boost/beast/ssl.hpp>
 
+// JsonCPP library
+#include <jsoncpp/json/json.h>
+
 namespace beast = boost::beast;         // from <boost/beast.hpp>
 namespace asio = boost::asio;            // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
@@ -117,22 +120,13 @@ namespace ws
 
         }
 
-        /** This function will be called when server received text message from client
+        /** This function will be called when server received message from client
          * @param caller As above
          * @param endPoint_str The remote peer's IP:Port
-         * @s The received string in text format
+         * @PTR_buffer The received data in binary format
+         * @is_text The data is binary or text
          */
-        virtual void onReadText(void *caller, string &endPoint_str, const string &s)
-        {
-
-        }
-
-        /** This function will be called when server received binary message from client
-         * @param caller As above
-         * @param endPoint_str The remote peer's IP:Port
-         * @data The received data in binary format
-         */
-        virtual void onReadBinary(void *caller, string &endPoint_str, const PTR_buffer data)
+        virtual void onMessage(void *caller, string &endPoint_str, const PTR_buffer data, bool is_text)
         {
 
         }
@@ -188,20 +182,11 @@ namespace ws
         }
 
         template<typename ...Args>
-        void onReadText(Args &&...args)
+        void onMessage(Args &&...args)
         {
             for (auto &&plugin:_plugins)
             {
-                plugin->onReadText(std::forward<Args &&>(args)...);
-            }
-        }
-
-        template<typename ...Args>
-        void onReadBinary(Args &&...args)
-        {
-            for (auto &&plugin:_plugins)
-            {
-                plugin->onReadBinary(std::forward<Args &&>(args)...);
+                plugin->onMessage(std::forward<Args &&>(args)...);
             }
         }
 
@@ -222,6 +207,8 @@ namespace ws
     };
 
 
+    /** This plugin is used for Remove Session instance when onClose
+     */
     template<typename Owner, typename Caller>
     class SessionRemover : public BasePlugin
     {
@@ -231,9 +218,61 @@ namespace ws
 
         }
 
+        void onConnect(void *caller, string &endPoint_str)
+        {
+
+        }
+
+        void onMessage(void *caller, string &endPoint_str, PTR_buffer data, bool is_text)
+        {
+
+        }
+
         void onClose(void *caller, string &endPoint_str)
         {
-            GetOwner()->deleteSession(endPoint_str);
+
+        }
+
+    private:
+
+    };
+
+
+    /** This plugin is used for store user callback function
+    */
+    template<typename Owner, typename Caller>
+    class UserCallBack : public BasePlugin
+    {
+    public:
+        UserCallBack(Owner *p) : BasePlugin(pluginType::Session_Plugin, p)
+        {
+        }
+
+        void onConnect(void *caller, string &endPoint_str)
+        {
+            auto f = GetOwner()->on_connect;
+            if (f)
+            {
+                f((Caller*)caller, endPoint_str);
+            }
+        }
+
+        void onClose(void *caller, string &endPoint_str)
+        {
+            auto f = GetOwner()->on_disconnect;
+            if (f)
+            {
+                f((Caller*)caller, endPoint_str);
+            }
+        }
+
+        void onMessage(void *caller, string &endPoint_str, PTR_buffer data, bool is_text)
+        {
+            auto f = GetOwner()->on_message;
+            if (f)
+            {
+                f((Caller*)caller, endPoint_str, data, is_text);
+            }
         }
 
     private:
@@ -243,9 +282,10 @@ namespace ws
         }
     };
 
-/**
- * This class is a helper class which is used to print some information. Do not use this class
- */
+
+    /**
+     * This class is a helper class which is used to print some information. Do not use this class
+     */
     class LogPrinter
     {
     public:
@@ -323,9 +363,9 @@ namespace ws
         bool _enable = true;
     };
 
-/**
- * This class is a helper class which is used to buffer Websocket send data. Do not use this class
- */
+    /**
+     * This class is a helper class which is used to buffer Websocket send data. Do not use this class
+     */
     class WriteTaskManager
     {
         /**
@@ -408,45 +448,44 @@ namespace ws
     };
 
 
-/**
- * This class is used for calculate the Network download/upload speed.
- * You have 2 mode to calculate the network speed you want.
- *
- * Mode 1:
- * Give t1(start time),t2(end_time) and b1,b2,b3,... this class will calculate a estimated speed in the past duration.
- * t1/t2 means the time you call the method SetStart/GetSpeed, and t1/t2 will be calculated automatically.
- *
- * For example:
- * NetSpeed spd;
- * spd.SetMode(1);
- * spd.SetStart(500); // statistics cycle = 500ms
- * spd.SetData(1000);
- * spd.SetData(1072);
- * spd.SetData(1072);
- * double speed2 = spd.GetSpeed(); // Get Speed in the last 0.5 sec KB/s
- *
- * Mode 2:
- * Give t1(start time),b1,b2,b3,... and a callback function, this class will calculate a estimate speed in every duration.
- *
- * For example:
- * void handler(double speed)
- * {
- *     std::cout << speed << std::endl;
- * }
- *
- * NetSpeed spd;
- * spd.SetMode(2);
- * spd.Register_Callback(&handler);
- * spd.SetDurationAsync(2000); // get a estimate speed in every 2 second
- * spd.StartAsync();
- * spd.SetDataAsync(1000);
- * spd.SetDataAsync(2000);
- * ...
- * spd.SetDataAsync(1000); // whenever you want to insert new data
- * ...
- * spd.EndAsync();
- */
-
+    /**
+     * This class is used for calculate the Network download/upload speed.
+     * You have 2 mode to calculate the network speed you want.
+     *
+     * Mode 1:
+     * Give t1(start time),t2(end_time) and b1,b2,b3,... this class will calculate a estimated speed in the past duration.
+     * t1/t2 means the time you call the method SetStart/GetSpeed, and t1/t2 will be calculated automatically.
+     *
+     * For example:
+     * NetSpeed spd;
+     * spd.SetMode(1);
+     * spd.SetStart(500); // statistics cycle = 500ms
+     * spd.SetData(1000);
+     * spd.SetData(1072);
+     * spd.SetData(1072);
+     * double speed2 = spd.GetSpeed(); // Get Speed in the last 0.5 sec KB/s
+     *
+     * Mode 2:
+     * Give t1(start time),b1,b2,b3,... and a callback function, this class will calculate a estimate speed in every duration.
+     *
+     * For example:
+     * void handler(double speed)
+     * {
+     *     std::cout << speed << std::endl;
+     * }
+     *
+     * NetSpeed spd;
+     * spd.SetMode(2);
+     * spd.Register_Callback(&handler);
+     * spd.SetDurationAsync(2000); // get a estimate speed in every 2 second
+     * spd.StartAsync();
+     * spd.SetDataAsync(1000);
+     * spd.SetDataAsync(2000);
+     * ...
+     * spd.SetDataAsync(1000); // whenever you want to insert new data
+     * ...
+     * spd.EndAsync();
+     */
     class IOSpeedCounter
     {
     public:
@@ -579,10 +618,10 @@ namespace ws
         unsigned int _duration = 1000;
     };
 
-/**
- * Session class, each websocket connection have a session, and each session have a strand.
- * So no need to use threads synchronization
- */
+    /**
+     * Session class, each websocket connection have a session, and each session have a strand.
+     * So no need to use threads synchronization
+     */
     class Session : public std::enable_shared_from_this<Session>
     {
     private:
@@ -801,17 +840,8 @@ namespace ws
             }
 
             // call the plugins
-            if (_ws.got_text())
-            {
-                const string s((const char *) _read_buffer.data().data(), _read_buffer.size());
-                _pluginManager.onReadText(this, _endpoint_str, s);
-                _shared_pluginManager.onReadText(this, _endpoint_str, s);
-            }
-            else
-            {
-                shared_ptr<beast::flat_buffer> buffer = std::make_shared<beast::flat_buffer>(std::move(_read_buffer));
-                _shared_pluginManager.onReadBinary(this, _endpoint_str, buffer);
-            }
+            shared_ptr<beast::flat_buffer> buffer = std::make_shared<beast::flat_buffer>(std::move(_read_buffer));
+            _shared_pluginManager.onMessage(this, _endpoint_str, buffer, _ws.got_text());
 
             do_read();
         }
@@ -883,9 +913,9 @@ namespace ws
     };
 
 
-/**
- * Accepts incoming connections and launches new sessions
- */
+    /**
+     * Accepts incoming connections and launches new sessions
+     */
     class listener
     {
     private:
@@ -895,13 +925,23 @@ namespace ws
         LogPrinter _logPrinter;
 
     public:
+        // callback function
+        std::function<void(Session *caller, string endpoint, const PTR_buffer data, bool is_text)> on_message;
+        std::function<void(Session *caller, string endpoint)> on_connect;
+        std::function<void(Session *caller, string endpoint)> on_disconnect;
         PluginManager pluginManager;                            // plugin manager which saves all plugins. All plugins in listener class will have effect in all sessions
 
     public:
         listener(asio::io_context &ioc) : _ioc(ioc), _acceptor(ioc)
         {
+            on_message = nullptr;
+            on_connect = nullptr;
+            on_disconnect = nullptr;
+
             // add plugins
             // be careful, the SessionRemover should be the last plugin. Because these plugin will be called in sequence
+            pluginManager.AddPlugin(
+                    shared_ptr<UserCallBack<listener, Session>>(new UserCallBack<listener, Session>(this)));
             pluginManager.AddPlugin(
                     shared_ptr<SessionRemover<listener, Session>>(new SessionRemover<listener, Session>(this)));
         }
@@ -944,14 +984,12 @@ namespace ws
             }
             return true;
         }
+
         // run server
-
-
         void run()
         {
             do_accept();
         }
-
 
         // insert a session to session map when a session is established(connected)
         void addSession(const string &endPoint, shared_ptr<Session> &sp)
@@ -969,6 +1007,14 @@ namespace ws
         const map<const string, shared_ptr<Session>> &GetSessionList()
         {
             return _session_Set;
+        }
+
+        shared_ptr<Session> GetSession(const string endpoint)
+        {
+            if (_session_Set.count(endpoint) > 0)
+                return _session_Set[endpoint];
+            else
+                return nullptr;
         }
 
     private:
@@ -1014,7 +1060,7 @@ namespace ws
             on_disconnect = nullptr;
         }
 
-        void listen(string address_str, const unsigned short port, bool wss = false)
+        void listen(string address_str, const unsigned short port, bool wss = false, bool block = false)
         {
             if (_running)
                 return;
@@ -1028,6 +1074,8 @@ namespace ws
                 _listener->run();
             else
                 return;
+
+            setCallback();
 
             for (auto i = 0; i < _threads_num; ++i)
                 _thread_pool.emplace_back(
@@ -1054,6 +1102,8 @@ namespace ws
             else
                 return;
 
+            setCallback();
+
             for (auto i = 0; i < _threads_num - 1; ++i)
                 _thread_pool.emplace_back(
                         [this]
@@ -1076,14 +1126,42 @@ namespace ws
             _running = false;
         }
 
-        void SendBinaryMessage()
+        void SendBinaryMessage(PTR_buffer data, const string endpoint = "")
         {
-
+            if (endpoint == "")
+            {
+                for (auto &&sess:_listener->GetSessionList())
+                {
+                    sess.second->SendBinaryMessage(data);
+                }
+            }
+            else
+            {
+                _listener->GetSession(endpoint)->SendBinaryMessage(data);
+            }
         }
 
-        void SendTextMessage()
+        void SendTextMessage(const string &text, const string endpoint = "")
         {
+            if (endpoint == "")
+            {
+                for (auto &&sess:_listener->GetSessionList())
+                {
+                    sess.second->SendTextMessage(text);
+                }
+            }
+            else
+            {
+                _listener->GetSession(endpoint)->SendTextMessage(text);
+            }
+        }
 
+    private:
+        void setCallback()
+        {
+            _listener->on_connect = on_connect;
+            _listener->on_disconnect = on_disconnect;
+            _listener->on_message = on_message;
         }
 
     public:
@@ -1098,6 +1176,45 @@ namespace ws
         asio::io_context _ioc;
         shared_ptr<listener> _listener;
     };
+
+    // help function
+    string to_string(const PTR_buffer data)
+    {
+        return string((const char *)data->data().data(), data->size());
+    }
+
+    Json::Value json_load(const PTR_buffer data)
+    {
+        return Json::Value(to_string(data));
+    }
+
+    Json::Value json_load(const string& str)
+    {
+        return Json::Value(str);
+    }
+
+    string json_dump(const Json::Value& json)
+    {
+        Json::StreamWriterBuilder builder;
+        builder.settings_["indentation"] = "";
+        return Json::writeString(builder, json);
+    }
+
+    void buf_write(const PTR_buffer data, void* p, size_t size)
+    {
+        beast::ostream(*data).write(reinterpret_cast<const char*>(p), size);
+    }
+
+    void buf_write(const PTR_buffer data, const string& str)
+    {
+        beast::ostream(*data).write(reinterpret_cast<const char*>(str.c_str()), str.size());
+    }
+
+    void buf_write(const PTR_buffer data, const Json::Value& json)
+    {
+        auto str = json_dump(json);
+        beast::ostream(*data).write(reinterpret_cast<const char*>(str.c_str()), str.size());
+    }
 }
 
 #endif //CPP_WEBSOCKET_CPP_WEBSOCKET_HPP
