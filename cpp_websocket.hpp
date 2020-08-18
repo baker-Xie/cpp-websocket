@@ -2,6 +2,29 @@
 // Created by u on 20-8-15.
 //
 
+/** This is a websocket class using boost::beast and jsoncpp
+example:
+int main()
+{
+    ws::server srv;
+    Demo demo;
+    srv.on_connect = [&](ws::Session *caller, string end_point)
+    {
+
+    };
+    srv.on_disconnect = [&](ws::Session *caller, string end_point)
+    {
+
+    };
+
+    srv.on_message = [&](ws::Session *caller, string end_point, ws::PTR_buffer data, bool is_text)
+    {
+
+    };
+    srv.listen_block("127.0.0.1", 8001);
+}
+ */
+
 #ifndef CPP_WEBSOCKET_CPP_WEBSOCKET_HPP
 #define CPP_WEBSOCKET_CPP_WEBSOCKET_HPP
 
@@ -44,6 +67,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 using std::flush;
+using namespace std::placeholders;
 
 namespace ws
 {
